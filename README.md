@@ -1,2 +1,2 @@
 # vtt-macros
-VTT Foundey Macros
+VTT Foundry Macros
