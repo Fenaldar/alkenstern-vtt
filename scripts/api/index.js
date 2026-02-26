@@ -6,6 +6,7 @@ import * as actors from "../util/actors.js";
 import * as chat from "../util/chat.js";
 import * as pf2e from "../util/pf2e.js";
 import { CONSTANTS } from "./constants.js";
+import * as mtb from "../integrations/monks-tokenbar.js";
 
 export function registerAlkensternAPI() {
   game.alkenstern ??= {};
@@ -19,6 +20,7 @@ export function registerAlkensternAPI() {
   game.alkenstern.util.actors = actors;
   game.alkenstern.util.chat = chat;
   game.alkenstern.util.pf2e = pf2e;
-
+  game.alkenstern.mtb = mtb;
+  
   console.log("[alkenstern] API registered", game.alkenstern);
 }
