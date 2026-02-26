@@ -1,0 +1,1 @@
+// Vorbereitungspunkte-Logik (Effect + desc)
