@@ -1,6 +1,17 @@
 {
   "id": "alkenstern",
-  "title": "Alkenstern",
-  "description": "Grundstruktur für das Alkenstern-Modul.",
-  "version": "0.0.1"
+  "title": "Alkenstern Tools",
+  "description": "Hilfsfunktionen für Zeit, Vorbereitungspunkte und Auszeit-Aktionen (PF2e).",
+  "version": "0.1.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13.351"
+  },
+  "authors": [{ "name": Fenaldar" }],
+  "esmodules": [
+    "scripts/main.js"
+  ],
+  "relationships": {
+    "systems": [{ "id": "pf2e" }]
+  }
 }
