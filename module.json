@@ -13,5 +13,7 @@
   ],
   "relationships": {
     "systems": [{ "id": "pf2e" }]
-  }
+  },
+  "manifest": "https://github.com/Fenaldar/alkenstern-vtt/releases/latest/download/module.json",
+  "download": "https://github.com/Fenaldar/alkenstern-vtt/releases/latest/download/module.zip"
 }
