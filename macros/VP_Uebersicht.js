@@ -66,7 +66,12 @@
     .sort((a, b) => (a.remainingHours - b.remainingHours) || a.name.localeCompare(b.name));
 
   const renderRows = (items) => items
-    .map(r => `<li><strong>${r.name}</strong>: ${r.vp} VP <span style="opacity:0.8;">(Zeit: ${r.timeText})</span></li>`)
+    .map(r => {
+      const availableTimeText = Number.isFinite(r.remainingHours)
+        ? formatDaysHours(r.remainingHours)
+        : "unbegrenzt";
+      return `<li><strong>${r.name}</strong>: ${r.vp} VP <span style="opacity:0.8;">(Zeit: ${r.timeText}, verfügbar: ${availableTimeText})</span></li>`;
+    })
     .join("");
 
   const list = rows.length
