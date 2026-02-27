@@ -1,1 +1,0 @@
-// gmWhisper(), gmSpeaker(), etc.

@@ -1,1 +1,0 @@
-// getSelectedCharacters(), getSceneCharacters()
