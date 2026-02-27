@@ -4,7 +4,6 @@
 
   const timeEffectSlug = "time-tracker";
   const timeResSlug = "verstrichene-zeit";
-  const maxHours = 4 * 24; // 96h Gesamtzeit
 
   const chatApi = game.alkenstern?.util?.chat;
   if (!chatApi?.gmWhisper) {
@@ -43,13 +42,15 @@
       : null;
 
     const hours = Number(timeRule?.value ?? 0);
-    const remainingHours = Math.max(0, maxHours - hours);
+    const maxHours = Number(timeRule?.max);
+    const hasMaxHours = Number.isFinite(maxHours) && maxHours >= 0;
+    const remainingHours = hasMaxHours ? Math.max(0, maxHours - hours) : Number.POSITIVE_INFINITY;
     const timeText = timeEffect ? formatDaysHours(hours) : "—";
 
     // ✅ Nur aufnehmen, wenn mind. eins existiert (VP-Effect oder Zeit-Effect)
     if (!vpEffect && !timeEffect) continue;
 
-    rows.push({ name: actor.name, vp: vpValue, timeText, hours, remainingHours, hasNoTimeLeft: timeEffect ? remainingHours <= 0 : false });
+    rows.push({ name: actor.name, vp: vpValue, timeText, hours, remainingHours, hasNoTimeLeft: timeEffect ? (hasMaxHours && remainingHours <= 0) : false });
 
     // Summe nur über VP (auch wenn VP-Effekt fehlt bleibt vpValue=0)
     sumVP += vpValue;
