@@ -5,7 +5,11 @@
   const timeEffectSlug = "time-tracker";
   const timeResSlug = "verstrichene-zeit";
 
-  const gmUser = game.users.find(u => u.isGM && u.active) ?? game.users.find(u => u.isGM);
+  const chatApi = game.alkenstern?.util?.chat;
+  if (!chatApi?.gmWhisper) {
+    ui.notifications.error("Alkenstern Chat-API nicht verfügbar (game.alkenstern.util.chat).");
+    return;
+  }
 
   function formatDaysHours(totalHours) {
     const h = Math.max(0, Math.floor(Number(totalHours) || 0));
@@ -73,13 +77,7 @@
     </div>
   `;
 
-  const gmIds = game.users.filter(u => u.isGM).map(u => u.id);
-
-  await ChatMessage.create({
-    speaker: gmUser ? { alias: gmUser.name } : ChatMessage.getSpeaker(),
-    whisper: gmIds,
-    content
-  });
+  await chatApi.gmWhisper(content);
 
   ui.notifications.info(`Übersicht: ${rows.length} Charakter(e), Summe VP ${sumVP}.`);
 })();

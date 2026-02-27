@@ -32,8 +32,11 @@
       return;
     }
 
-    const gmUser = game.users.find(u => u.isGM && u.active) ?? game.users.find(u => u.isGM);
-    const gmIds = game.users.filter(u => u.isGM).map(u => u.id);
+    const chatApi = game.alkenstern?.util?.chat;
+    if (!chatApi?.gmWhisper) {
+      ui.notifications.error("Alkenstern Chat-API nicht verfügbar (game.alkenstern.util.chat).");
+      return;
+    }
 
     // ---- Zeit-Effekt über zentrale API ----
     const timeApi = game.alkenstern?.time;
@@ -192,22 +195,18 @@ const optionsHtml = SKILLS
           lines.push(`<li><strong>${actor.name}</strong>: ${label}${timeNote}</li>`);
         }
 
-        await ChatMessage.create({
-          speaker: gmUser ? ChatMessage.getSpeaker({ user: gmUser }) : ChatMessage.getSpeaker(),
-          whisper: gmIds,
-          content: `
-            <div class="pf2e chat-card">
-              <header>
-                <h3 style="margin:0;">Beschäftigung während der Auszeit</h3>
-                <div style="opacity:0.85;">Fertigkeit: <strong>${displaySkillLabel}</strong> • SG <strong>${dc}</strong> • Zeit <strong>${formatDaysHours(hours)}</strong></div>
-              </header>
-              <hr/>
-              <ul style="margin:0; padding-left:1.2em;">
-                ${lines.join("")}
-              </ul>
-            </div>
-          `
-        });
+        await chatApi.gmWhisper(`
+          <div class="pf2e chat-card">
+            <header>
+              <h3 style="margin:0;">Beschäftigung während der Auszeit</h3>
+              <div style="opacity:0.85;">Fertigkeit: <strong>${displaySkillLabel}</strong> • SG <strong>${dc}</strong> • Zeit <strong>${formatDaysHours(hours)}</strong></div>
+            </header>
+            <hr/>
+            <ul style="margin:0; padding-left:1.2em;">
+              ${lines.join("")}
+            </ul>
+          </div>
+        `);
       } catch (err) {
         console.error("[Auszeit Macro] Fehler:", err);
         Hooks.off("updateChatMessage", hookId);
