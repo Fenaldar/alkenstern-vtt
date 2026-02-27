@@ -14,6 +14,12 @@
       return;
     }
 
+    const mtbApi = game.alkenstern?.mtb;
+    if (!mtbApi?.extractEntries || !mtbApi?.allRolled || !mtbApi?.evaluateOutcome) {
+      ui.notifications.error("Alkenstern MTB-Helper fehlen (game.alkenstern.mtb). Modul aktuell?");
+      return;
+    }
+
     const selected = canvas.tokens.controlled ?? [];
     if (!selected.length) {
       ui.notifications.warn("Bitte zuerst Tokens auswählen.");
@@ -38,61 +44,7 @@
 
     const formatDaysHours = (totalHours) => timeApi.format(totalHours);
 
-    // ---- Robust DoS-Erkennung (inkl. nat20/nat1 fallback) ----
-    const getOutcome = (entry, dc) => {
-      const dosRaw =
-        entry?.roll?.degreeOfSuccess ??
-        entry?.roll?.options?.degreeOfSuccess ??
-        entry?.roll?.options?.dos ??
-        entry?.degreeOfSuccess ??
-        entry?.degree ??
-        entry?.dos;
-
-      if (typeof dosRaw === "string") {
-        const s = dosRaw.toLowerCase().replace(/[\s_-]/g, "");
-        if (["criticalsuccess", "critsuccess", "cs"].includes(s)) return "criticalSuccess";
-        if (["success", "s"].includes(s)) return "success";
-        if (["criticalfailure", "critfailure", "criticalfail", "critfail", "cf"].includes(s)) return "criticalFailure";
-        if (["failure", "fail", "f"].includes(s)) return "failure";
-      }
-
-      if (typeof dosRaw === "number" && Number.isFinite(dosRaw)) {
-        return dosRaw >= 3 ? "criticalSuccess"
-          : dosRaw === 2 ? "success"
-          : dosRaw === 1 ? "failure"
-          : "criticalFailure";
-      }
-
-      const total = entry?.roll?.total ?? entry?.total;
-      if (typeof total !== "number" || !Number.isFinite(total)) return "failure";
-
-      const dieResult =
-        entry?.roll?.dice?.[0]?.results?.[0]?.result ??
-        entry?.roll?.terms?.find?.(t => t?.faces === 20)?.results?.[0]?.result ??
-        entry?.roll?.terms?.[0]?.results?.[0]?.result;
-
-      const margin = total - dc;
-      let degree =
-        margin >= 10 ? 3 :
-        margin >= 0 ? 2 :
-        margin <= -10 ? 0 :
-        1;
-
-      if (dieResult === 20) degree = Math.min(3, degree + 1);
-      if (dieResult === 1) degree = Math.max(0, degree - 1);
-
-      return degree === 3 ? "criticalSuccess"
-        : degree === 2 ? "success"
-        : degree === 1 ? "failure"
-        : "criticalFailure";
-    };
-
-    const getEntries = (flags) => {
-      const mtb = flags?.["monks-tokenbar"];
-      if (!mtb) return [];
-      return Object.values(mtb).filter(v => v && typeof v === "object" && v.id);
-    };
-    const allRolled = (entries) => entries.length > 0 && entries.every(e => e.roll);
+    // ---- Robust DoS-Erkennung über zentrale MTB-Helper ----
 
     // ---- PF2e-native Skill + Lore Liste ----
     function formatLoreLabel(rawLabel) {
@@ -215,8 +167,8 @@ const optionsHtml = SKILLS
       try {
         if (messageDoc.id !== rollMsg.id) return;
 
-        const entries = getEntries(messageDoc.flags);
-        if (!allRolled(entries)) return;
+        const entries = mtbApi.extractEntries(messageDoc.flags);
+        if (!mtbApi.allRolled(entries)) return;
 
         Hooks.off("updateChatMessage", hookId);
 
@@ -229,7 +181,7 @@ const optionsHtml = SKILLS
           const actor = token?.actor;
           if (!actor || actor.type !== "character") continue;
 
-          const outcome = getOutcome(e, dc);
+          const outcome = mtbApi.evaluateOutcome(e, dc).outcome;
           const label = outcomeLabels[outcome] ?? outcomeLabels.failure;
 
           const tRes = await timeApi.addHours(actor, hours);
