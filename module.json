@@ -2,7 +2,7 @@
   "id": "alkenstern",
   "title": "Alkenstern Tools",
   "description": "Hilfsfunktionen für Zeit, Vorbereitungspunkte und Auszeit-Aktionen (PF2e).",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "compatibility": {
     "minimum": "13",
     "verified": "13.351"
