@@ -34,8 +34,11 @@
       return;
     }
 
-    // GM für Chat-Speaker (wie bisher)
-    const gmUser = game.users.find(u => u.isGM && u.active) ?? game.users.find(u => u.isGM);
+    const chatApi = game.alkenstern?.util?.chat;
+    if (!chatApi?.getActiveGM) {
+      ui.notifications.error("Alkenstern Chat-API nicht verfügbar (game.alkenstern.util.chat).");
+      return;
+    }
 
     // ---------- Helpers ----------
 
@@ -130,18 +133,18 @@
 
         // ✅ Chat immer vom GM (wie bisher)
         await ChatMessage.create({
-          speaker: gmUser ? { alias: gmUser.name } : ChatMessage.getSpeaker(),
+          speaker: ChatMessage.getSpeaker({ user: chatApi.getActiveGM() ?? game.user }),
           content: `
-            <div class="pf2e chat-card">
-              <header>
-                <h3 style="margin:0;">${flavor}</h3>
-              </header>
-              <hr/>
-              <ul style="margin:0; padding-left:1.2em;">
-                ${lines.join("")}
-              </ul>
-            </div>
-          `
+          <div class="pf2e chat-card">
+            <header>
+              <h3 style="margin:0;">${flavor}</h3>
+            </header>
+            <hr/>
+            <ul style="margin:0; padding-left:1.2em;">
+              ${lines.join("")}
+            </ul>
+          </div>
+        `
         });
 
       } catch (err) {
