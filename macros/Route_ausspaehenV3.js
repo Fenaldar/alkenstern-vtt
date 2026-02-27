@@ -91,29 +91,11 @@
     };
 
     // ---------- VOR DEM WURF: Zeit prüfen (mit neuer time-API) ----------
-    const blocked = [];
-    const allowed = [];
-
-    for (const t of selected) {
-      const actor = t.actor;
-      if (!actor || actor.type !== "character") continue;
-
-      // Effekt ggf. anlegen, damit max/desc konsistent sind
-      const timeEff = await game.alkenstern.time.getOrCreate(actor);
-
-      // Sicherstellen, dass max = maxHoursToRoll ist (einheitliches Limit)
-      // (Wenn du das pro Charakter unterschiedlich halten willst, entferne setMax.)
-      await game.alkenstern.time.setMax(actor, maxHoursToRoll);
-
-      const hours = game.alkenstern.time.readHours(timeEff);
-      const wouldBe = hours + timeAddHours;
-
-      if (wouldBe > maxHoursToRoll) {
-        blocked.push({ name: actor.name, hours, wouldBe });
-      } else {
-        allowed.push(t);
-      }
-    }
+    const { blocked, allowed } = await game.alkenstern.time.filterTokensByAvailableTime(
+      selected,
+      timeAddHours,
+      maxHoursToRoll
+    );
 
     if (blocked.length) {
       const msg = blocked
