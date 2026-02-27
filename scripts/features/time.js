@@ -10,6 +10,7 @@
 //   await game.alkenstern.time.addHours(actor, delta)
 //   await game.alkenstern.time.setMax(actor, max)
 //   await game.alkenstern.time.setHours(actor, hours, max?)   // ✅ hours setzen + optional max setzen
+//   await game.alkenstern.time.filterTokensByAvailableTime(tokens, hoursToAdd, maxHours)
 //   game.alkenstern.time.format(hours)
 
 import { CONSTANTS } from "../api/constants.js";
@@ -193,4 +194,28 @@ export async function setHours(actor, hours, max = null) {
   actor.sheet?.render(false);
 
   return { value: after, max: effectiveMax };
+}
+
+export async function filterTokensByAvailableTime(tokens, hoursToAdd, maxHours) {
+  const blocked = [];
+  const allowed = [];
+
+  for (const token of tokens ?? []) {
+    const actor = token?.actor;
+    if (!actor || actor.type !== "character") continue;
+
+    const timeEff = await getOrCreate(actor);
+    await writeMax(timeEff, maxHours);
+
+    const hours = readHours(timeEff);
+    const wouldBe = hours + Math.floor(Number(hoursToAdd) || 0);
+
+    if (wouldBe > maxHours) {
+      blocked.push({ name: actor.name, hours, wouldBe });
+    } else {
+      allowed.push(token);
+    }
+  }
+
+  return { allowed, blocked };
 }
