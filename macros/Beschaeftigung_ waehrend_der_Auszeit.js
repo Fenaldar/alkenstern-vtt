@@ -7,6 +7,8 @@
 
 (async () => {
   try {
+    const collator = new Intl.Collator("de", { sensitivity: "base" });
+
     if (!game.MonksTokenBar?.requestRoll) {
       ui.notifications.error("Monk's TokenBar: requestRoll nicht gefunden.");
       return;
@@ -27,68 +29,14 @@
     const gmUser = game.users.find(u => u.isGM && u.active) ?? game.users.find(u => u.isGM);
     const gmIds = game.users.filter(u => u.isGM).map(u => u.id);
 
-    // ---- Zeit-Effekt-Konfig ----
-    const timeEffectSlug = "time-tracker";
-    const timeResSlug = "verstrichene-zeit";
-
-    const timeTemplate = {
-      name: "Zeitmesser",
-      type: "effect",
-      img: "icons/svg/clockwork.svg",
-      system: {
-        slug: timeEffectSlug,
-        description: { value: "<p>Misst die verstrichene Zeit dieses Charakters.</p>", gm: "" },
-        rules: [{ key: "SpecialResource", slug: timeResSlug, label: "Verstrichene Zeit", max: 999999, value: 0 }],
-        duration: { value: -1, unit: "unlimited" },
-        tokenIcon: { show: false },
-        unidentified: false
-      }
-    };
-
-    function formatDaysHours(totalHours) {
-      const h = Math.max(0, Math.floor(Number(totalHours) || 0));
-      const days = Math.floor(h / 24);
-      const hours = h % 24;
-      if (days <= 0) return `${hours} h`;
-      if (hours === 0) return `${days} Tag${days === 1 ? "" : "e"}`;
-      return `${days} Tag${days === 1 ? "" : "e"} ${hours} h`;
+    // ---- Zeit-Effekt über zentrale API ----
+    const timeApi = game.alkenstern?.time;
+    if (!timeApi?.addHours || !timeApi?.format) {
+      ui.notifications.error("Alkenstern Zeit-API nicht verfügbar (game.alkenstern.time).");
+      return;
     }
 
-    async function getOrCreateTimeTracker(actor) {
-      let effect = actor.items.find(i => i.type === "effect" && i.system?.slug === timeEffectSlug);
-      if (!effect) {
-        const created = await actor.createEmbeddedDocuments("Item", [timeTemplate]);
-        effect = created?.[0];
-      }
-      if (effect && effect.system?.tokenIcon?.show !== false) {
-        await effect.update({ "system.tokenIcon.show": false });
-      }
-      return effect;
-    }
-
-    async function addTimeHours(actor, hoursToAdd) {
-      const effect = await getOrCreateTimeTracker(actor);
-      if (!effect) return { applied: 0 };
-
-      const rules = foundry.utils.duplicate(effect.system.rules ?? []);
-      for (const r of rules) {
-        if (r?.key === "SpecialResource" && r?.slug === timeResSlug) {
-          const before = Number(r.value ?? 0);
-          const after = before + hoursToAdd;
-          r.value = after;
-
-          await effect.update({
-            "system.rules": rules,
-            "system.description.value": `<p><strong>Verstrichene Zeit:</strong> ${formatDaysHours(after)}</p>`,
-            "system.tokenIcon.show": false
-          });
-
-          actor.sheet?.render(false);
-          return { before, after, applied: hoursToAdd };
-        }
-      }
-      return { applied: 0 };
-    }
+    const formatDaysHours = (totalHours) => timeApi.format(totalHours);
 
     // ---- Robust DoS-Erkennung (inkl. nat20/nat1 fallback) ----
     const getOutcome = (entry, dc) => {
@@ -147,6 +95,13 @@
     const allRolled = (entries) => entries.length > 0 && entries.every(e => e.roll);
 
     // ---- PF2e-native Skill + Lore Liste ----
+    function formatLoreLabel(rawLabel) {
+      let loreName = String(rawLabel ?? "").trim();
+      loreName = loreName.replace(/^Lore[:\s-]*/i, "").trim();
+      loreName = loreName.replace(/\bKontrukte\b/gi, "Konstrukte");
+      return `Kenntnis ${loreName}`;
+    }
+
     function getPf2eSkillAndLoreOptions(actor) {
       const core = Object.entries(CONFIG.PF2E.skills ?? {}).map(([slug, data]) => {
         const labelKeyOrText = data?.label ?? slug;
@@ -165,7 +120,7 @@
         lore.push({ key, label, kind: "lore" });
       }
 
-      return [...core, ...lore].sort((a, b) => a.label.localeCompare(b.label, "de"));
+      return [...core, ...lore].sort((a, b) => collator.compare(a.label, b.label));
     }
 
     const SKILLS = getPf2eSkillAndLoreOptions(referenceActor);
@@ -173,22 +128,7 @@
     // ---- Dialog: Skill + DC + Zeit ----
     const dialogResult = await new Promise((resolve) => {
 const optionsHtml = SKILLS
-  .map(s => {
-    if (s.kind !== "lore") {
-      return `<option value="${s.key}">${s.label}</option>`;
-    }
-
-    // Lore-Anzeige: "Kenntnis <Name>"
-    let loreName = String(s.label ?? "").trim();
-
-    // häufige Prefixe entfernen (falls vorhanden)
-    loreName = loreName.replace(/^Lore[:\s-]*/i, "").trim();
-
-    // Tippfehler korrigieren (dein Beispiel)
-    loreName = loreName.replace(/\bKontrukte\b/gi, "Konstrukte");
-
-    return `<option value="${s.key}">Kenntnis ${loreName}</option>`;
-  })
+  .map(s => `<option value="${s.key}">${s.kind === "lore" ? formatLoreLabel(s.label) : s.label}</option>`)
   .join("");
 
       const content = `
@@ -241,7 +181,11 @@ const optionsHtml = SKILLS
     if (!Number.isFinite(dc) || dc < 0) return ui.notifications.warn("Ungültiger SG.");
     if (!Number.isFinite(hours) || hours < 0) return ui.notifications.warn("Ungültige Zeit (Stunden).");
 
-    const skillLabel = SKILLS.find(s => s.key === skill)?.label ?? skill;
+    const selectedSkill = SKILLS.find(s => s.key === skill);
+    const skillLabel = selectedSkill?.label ?? skill;
+    const displaySkillLabel = selectedSkill?.kind === "lore"
+      ? formatLoreLabel(skillLabel)
+      : skillLabel;
 
     const tokenById = new Map(selected.map(t => [t.document.id, t]));
     const tokenArg = selected.map(t => ({ token: t.name }));
@@ -252,13 +196,20 @@ const optionsHtml = SKILLS
       showdc: true,
       silent: true,
       fastForward: false,
-      flavor: `Beschäftigung während der Auszeit: ${skillLabel} (${formatDaysHours(hours)})`,
+      flavor: `Beschäftigung während der Auszeit: ${displaySkillLabel} (${formatDaysHours(hours)})`,
       rollMode: "gmroll"
     });
 
     if (!rollMsg?.id) return;
 
     ui.notifications.info("Wurf angefordert – warte auf Ergebnisse …");
+
+    const outcomeLabels = {
+      criticalSuccess: "Kritischer Erfolg",
+      success: "Erfolg",
+      failure: "Fehlschlag",
+      criticalFailure: "Kritischer Fehlschlag"
+    };
 
     const hookId = Hooks.on("updateChatMessage", async (messageDoc) => {
       try {
@@ -270,23 +221,18 @@ const optionsHtml = SKILLS
         Hooks.off("updateChatMessage", hookId);
 
         const lines = [];
+        const tokenLookup = new Map(canvas.tokens.placeables.map(t => [t.document.id, t]));
 
         for (const e of entries) {
-          const token =
-            tokenById.get(e.id) ??
-            canvas.tokens.placeables.find(t => t.document.id === e.id);
+          const token = tokenById.get(e.id) ?? tokenLookup.get(e.id);
 
           const actor = token?.actor;
           if (!actor || actor.type !== "character") continue;
 
           const outcome = getOutcome(e, dc);
-          const label =
-            outcome === "criticalSuccess" ? "Kritischer Erfolg" :
-            outcome === "success" ? "Erfolg" :
-            outcome === "failure" ? "Fehlschlag" :
-            "Kritischer Fehlschlag";
+          const label = outcomeLabels[outcome] ?? outcomeLabels.failure;
 
-          const tRes = await addTimeHours(actor, hours);
+          const tRes = await timeApi.addHours(actor, hours);
           const timeNote = (tRes.before !== undefined)
             ? ` <span style="opacity:0.8;">Zeit: ${formatDaysHours(tRes.before)} → ${formatDaysHours(tRes.after)}</span>`
             : "";
@@ -301,7 +247,7 @@ const optionsHtml = SKILLS
             <div class="pf2e chat-card">
               <header>
                 <h3 style="margin:0;">Beschäftigung während der Auszeit</h3>
-                <div style="opacity:0.85;">Fertigkeit: <strong>${skillLabel}</strong> • SG <strong>${dc}</strong> • Zeit <strong>${formatDaysHours(hours)}</strong></div>
+                <div style="opacity:0.85;">Fertigkeit: <strong>${displaySkillLabel}</strong> • SG <strong>${dc}</strong> • Zeit <strong>${formatDaysHours(hours)}</strong></div>
               </header>
               <hr/>
               <ul style="margin:0; padding-left:1.2em;">
