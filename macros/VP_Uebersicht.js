@@ -4,6 +4,7 @@
 
   const timeEffectSlug = "time-tracker";
   const timeResSlug = "verstrichene-zeit";
+  const maxHours = 4 * 24; // 96h Gesamtzeit
 
   const chatApi = game.alkenstern?.util?.chat;
   if (!chatApi?.gmWhisper) {
@@ -42,26 +43,47 @@
       : null;
 
     const hours = Number(timeRule?.value ?? 0);
+    const remainingHours = Math.max(0, maxHours - hours);
     const timeText = timeEffect ? formatDaysHours(hours) : "—";
 
     // ✅ Nur aufnehmen, wenn mind. eins existiert (VP-Effect oder Zeit-Effect)
     if (!vpEffect && !timeEffect) continue;
 
-    rows.push({ name: actor.name, vp: vpValue, timeText, hours });
+    rows.push({ name: actor.name, vp: vpValue, timeText, hours, remainingHours, hasNoTimeLeft: timeEffect ? remainingHours <= 0 : false });
 
     // Summe nur über VP (auch wenn VP-Effekt fehlt bleibt vpValue=0)
     sumVP += vpValue;
   }
 
-  // Sortierung: zuerst VP absteigend, dann Zeit absteigend
-  rows.sort((a, b) => (b.vp - a.vp) || (b.hours - a.hours));
+  const noTimeLeftRows = rows
+    .filter(r => r.hasNoTimeLeft)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const withTimeRows = rows
+    .filter(r => !r.hasNoTimeLeft)
+    // Sortierung nach verbleibender Zeit (wenig zuerst), dann Name
+    .sort((a, b) => (a.remainingHours - b.remainingHours) || a.name.localeCompare(b.name));
+
+  const renderRows = (items) => items
+    .map(r => `<li><strong>${r.name}</strong>: ${r.vp} VP <span style="opacity:0.8;">(Zeit: ${r.timeText})</span></li>`)
+    .join("");
 
   const list = rows.length
-    ? `<ul style="margin:0; padding-left:1.2em;">
-        ${rows
-          .map(r => `<li><strong>${r.name}</strong>: ${r.vp} VP <span style="opacity:0.8;">(Zeit: ${r.timeText})</span></li>`)
-          .join("")}
-       </ul>`
+    ? `
+      ${noTimeLeftRows.length
+        ? `<p style="margin:0 0 0.25em 0;"><strong>Keine Zeit mehr:</strong></p>
+           <ul style="margin:0; padding-left:1.2em;">
+             ${renderRows(noTimeLeftRows)}
+           </ul>`
+        : ""}
+      ${noTimeLeftRows.length && withTimeRows.length ? `<hr style="margin:0.5em 0;"/>` : ""}
+      ${withTimeRows.length
+        ? `<p style="margin:0 0 0.25em 0;"><strong>Noch Zeit verfügbar:</strong></p>
+           <ul style="margin:0; padding-left:1.2em;">
+             ${renderRows(withTimeRows)}
+           </ul>`
+        : ""}
+    `
     : `<p><em>Keine Charaktere mit Vorbereitungspunkten oder Zeitmesser gefunden.</em></p>`;
 
   const content = `
