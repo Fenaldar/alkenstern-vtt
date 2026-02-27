@@ -42,26 +42,54 @@
       : null;
 
     const hours = Number(timeRule?.value ?? 0);
+    const maxHours = Number(timeRule?.max);
+    const hasMaxHours = Number.isFinite(maxHours) && maxHours >= 0;
+    const remainingHours = hasMaxHours ? Math.max(0, maxHours - hours) : Number.POSITIVE_INFINITY;
     const timeText = timeEffect ? formatDaysHours(hours) : "—";
 
     // ✅ Nur aufnehmen, wenn mind. eins existiert (VP-Effect oder Zeit-Effect)
     if (!vpEffect && !timeEffect) continue;
 
-    rows.push({ name: actor.name, vp: vpValue, timeText, hours });
+    rows.push({ name: actor.name, vp: vpValue, timeText, hours, remainingHours, hasNoTimeLeft: timeEffect ? (hasMaxHours && remainingHours <= 0) : false });
 
     // Summe nur über VP (auch wenn VP-Effekt fehlt bleibt vpValue=0)
     sumVP += vpValue;
   }
 
-  // Sortierung: zuerst VP absteigend, dann Zeit absteigend
-  rows.sort((a, b) => (b.vp - a.vp) || (b.hours - a.hours));
+  const noTimeLeftRows = rows
+    .filter(r => r.hasNoTimeLeft)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const withTimeRows = rows
+    .filter(r => !r.hasNoTimeLeft)
+    // Sortierung nach verbleibender Zeit (wenig zuerst), dann Name
+    .sort((a, b) => (a.remainingHours - b.remainingHours) || a.name.localeCompare(b.name));
+
+  const renderRows = (items) => items
+    .map(r => {
+      const availableTimeText = Number.isFinite(r.remainingHours)
+        ? formatDaysHours(r.remainingHours)
+        : "unbegrenzt";
+      return `<li><strong>${r.name}</strong>: ${r.vp} VP <span style="opacity:0.8;">(Zeit: ${r.timeText}, verfügbar: ${availableTimeText})</span></li>`;
+    })
+    .join("");
 
   const list = rows.length
-    ? `<ul style="margin:0; padding-left:1.2em;">
-        ${rows
-          .map(r => `<li><strong>${r.name}</strong>: ${r.vp} VP <span style="opacity:0.8;">(Zeit: ${r.timeText})</span></li>`)
-          .join("")}
-       </ul>`
+    ? `
+      ${noTimeLeftRows.length
+        ? `<p style="margin:0 0 0.25em 0;"><strong>Keine Zeit mehr:</strong></p>
+           <ul style="margin:0; padding-left:1.2em;">
+             ${renderRows(noTimeLeftRows)}
+           </ul>`
+        : ""}
+      ${noTimeLeftRows.length && withTimeRows.length ? `<hr style="margin:0.5em 0;"/>` : ""}
+      ${withTimeRows.length
+        ? `<p style="margin:0 0 0.25em 0;"><strong>Noch Zeit verfügbar:</strong></p>
+           <ul style="margin:0; padding-left:1.2em;">
+             ${renderRows(withTimeRows)}
+           </ul>`
+        : ""}
+    `
     : `<p><em>Keine Charaktere mit Vorbereitungspunkten oder Zeitmesser gefunden.</em></p>`;
 
   const content = `
