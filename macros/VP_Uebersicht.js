@@ -1,20 +1,22 @@
 (async () => {
-  const carrierSlug = "vp-resource-carrier";
-  const resSlug = "vorbereitungspunkte";
+  const api = game.alkenstern;
+  const constants = api?.const;
+  const timeApi = api?.time;
 
-  const timeEffectSlug = "time-tracker";
-  const timeResSlug = "verstrichene-zeit";
+  if (!constants || !timeApi) {
+    ui.notifications.error("Alkenstern API nicht verfügbar (game.alkenstern.const / game.alkenstern.time).");
+    return;
+  }
 
-  const gmUser = game.users.find(u => u.isGM && u.active) ?? game.users.find(u => u.isGM);
+  const carrierSlug = constants.VP_EFFECT_SLUG;
+  const resSlug = constants.VP_RES_SLUG;
 
-  function formatDaysHours(totalHours) {
-    const h = Math.max(0, Math.floor(Number(totalHours) || 0));
-    const days = Math.floor(h / 24);
-    const hours = h % 24;
+  const timeEffectSlug = constants.TIME_EFFECT_SLUG;
 
-    if (days <= 0) return `${hours} h`;
-    if (hours === 0) return `${days} Tag${days === 1 ? "" : "e"}`;
-    return `${days} Tag${days === 1 ? "" : "e"} ${hours} h`;
+  const chatApi = game.alkenstern?.util?.chat;
+  if (!chatApi?.gmWhisper) {
+    ui.notifications.error("Alkenstern Chat-API nicht verfügbar (game.alkenstern.util.chat).");
+    return;
   }
 
   const rows = [];
@@ -33,31 +35,55 @@
 
     // --- Zeit lesen (optional) ---
     const timeEffect = actor.items.find(i => i.type === "effect" && i.system?.slug === timeEffectSlug);
-    const timeRule = timeEffect
-      ? (timeEffect.system.rules ?? []).find(r => r?.key === "SpecialResource" && r?.slug === timeResSlug)
-      : null;
-
-    const hours = Number(timeRule?.value ?? 0);
-    const timeText = timeEffect ? formatDaysHours(hours) : "—";
+    const hours = timeEffect ? timeApi.readHours(timeEffect) : 0;
+    const maxHours = timeEffect ? timeApi.readMax(timeEffect) : null;
+    const hasMaxHours = Number.isFinite(maxHours) && maxHours >= 0;
+    const remainingHours = hasMaxHours ? Math.max(0, maxHours - hours) : Number.POSITIVE_INFINITY;
+    const timeText = timeEffect ? timeApi.format(hours) : "—";
 
     // ✅ Nur aufnehmen, wenn mind. eins existiert (VP-Effect oder Zeit-Effect)
     if (!vpEffect && !timeEffect) continue;
 
-    rows.push({ name: actor.name, vp: vpValue, timeText, hours });
+    rows.push({ name: actor.name, vp: vpValue, timeText, hours, remainingHours, hasNoTimeLeft: timeEffect ? (hasMaxHours && remainingHours <= 0) : false });
 
     // Summe nur über VP (auch wenn VP-Effekt fehlt bleibt vpValue=0)
     sumVP += vpValue;
   }
 
-  // Sortierung: zuerst VP absteigend, dann Zeit absteigend
-  rows.sort((a, b) => (b.vp - a.vp) || (b.hours - a.hours));
+  const noTimeLeftRows = rows
+    .filter(r => r.hasNoTimeLeft)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const withTimeRows = rows
+    .filter(r => !r.hasNoTimeLeft)
+    // Sortierung nach verbleibender Zeit (wenig zuerst), dann Name
+    .sort((a, b) => (a.remainingHours - b.remainingHours) || a.name.localeCompare(b.name));
+
+  const renderRows = (items) => items
+    .map(r => {
+      const availableTimeText = Number.isFinite(r.remainingHours)
+        ? timeApi.format(r.remainingHours)
+        : "unbegrenzt";
+      return `<li><strong>${r.name}</strong>: ${r.vp} VP <span style="opacity:0.8;">(Zeit: ${r.timeText}, verfügbar: ${availableTimeText})</span></li>`;
+    })
+    .join("");
 
   const list = rows.length
-    ? `<ul style="margin:0; padding-left:1.2em;">
-        ${rows
-          .map(r => `<li><strong>${r.name}</strong>: ${r.vp} VP <span style="opacity:0.8;">(Zeit: ${r.timeText})</span></li>`)
-          .join("")}
-       </ul>`
+    ? `
+      ${noTimeLeftRows.length
+        ? `<p style="margin:0 0 0.25em 0;"><strong>Keine Zeit mehr:</strong></p>
+           <ul style="margin:0; padding-left:1.2em;">
+             ${renderRows(noTimeLeftRows)}
+           </ul>`
+        : ""}
+      ${noTimeLeftRows.length && withTimeRows.length ? `<hr style="margin:0.5em 0;"/>` : ""}
+      ${withTimeRows.length
+        ? `<p style="margin:0 0 0.25em 0;"><strong>Noch Zeit verfügbar:</strong></p>
+           <ul style="margin:0; padding-left:1.2em;">
+             ${renderRows(withTimeRows)}
+           </ul>`
+        : ""}
+    `
     : `<p><em>Keine Charaktere mit Vorbereitungspunkten oder Zeitmesser gefunden.</em></p>`;
 
   const content = `
@@ -73,13 +99,7 @@
     </div>
   `;
 
-  const gmIds = game.users.filter(u => u.isGM).map(u => u.id);
-
-  await ChatMessage.create({
-    speaker: gmUser ? { alias: gmUser.name } : ChatMessage.getSpeaker(),
-    whisper: gmIds,
-    content
-  });
+  await chatApi.gmWhisper(content);
 
   ui.notifications.info(`Übersicht: ${rows.length} Charakter(e), Summe VP ${sumVP}.`);
 })();

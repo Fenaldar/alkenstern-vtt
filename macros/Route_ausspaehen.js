@@ -11,7 +11,11 @@
     const timeAddHours = 12;
     const maxHoursToRoll = 4 * 24; // 96h
 
-    const gmUser = game.users.find(u => u.isGM && u.active) ?? game.users.find(u => u.isGM);
+    const chatApi = game.alkenstern?.util?.chat;
+    if (!chatApi?.getActiveGM) {
+      ui.notifications.error("Alkenstern Chat-API nicht verfügbar (game.alkenstern.util.chat).");
+      return;
+    }
 
     // ---------------- Templates ----------------
 
@@ -347,7 +351,7 @@ async function changeVpEffectValue(actor, delta) {
         }
 
         await ChatMessage.create({
-          speaker: gmUser ? { alias: gmUser.name } : ChatMessage.getSpeaker(),
+          speaker: ChatMessage.getSpeaker({ user: chatApi.getActiveGM() ?? game.user }),
           content: `
             <div class="pf2e chat-card">
               <header>
