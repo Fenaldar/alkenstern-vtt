@@ -8,8 +8,11 @@ export function gmIds() {
 }
 
 export async function gmWhisper(html) {
+  const activeGM = getActiveGM();
+
   return ChatMessage.create({
-    speaker: ChatMessage.getSpeaker({ user: getActiveGM() ?? game.user }),
+    user: activeGM?.id ?? game.user.id,
+    speaker: ChatMessage.getSpeaker({ user: activeGM ?? game.user }),
     whisper: gmIds(),
     content: html
   });
