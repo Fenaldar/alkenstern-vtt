@@ -19,6 +19,12 @@
 
   const actors = characterTokens.map(token => token.actor);
 
+    const chatApi = game.alkenstern?.util?.chat;
+  if (!chatApi?.gmWhisper) {
+    ui.notifications.error("Alkenstern Chat-API nicht verfügbar (game.alkenstern.util.chat).");
+    return;
+  }
+  
   const timeApi = game.alkenstern?.time;
   if (!timeApi?.addHours || !timeApi?.setHours || !timeApi?.getOrCreate || !timeApi?.readHours || !timeApi?.readMax || !timeApi?.format) {
     ui.notifications.error("Alkenstern Zeit-API nicht verfügbar (game.alkenstern.time).");
@@ -109,9 +115,9 @@
   }
 
   const actionLabel = sign === "+"
-    ? `+${amount} h addiert`
+    ? `+${amount} h`
     : sign === "-"
-      ? `${amount} h subtrahiert`
+      ? `-${amount} h`
       : `auf ${amount} h gesetzt`;
 
   ui.notifications.info(`Zeit ${actionLabel} für ${updates.length} Charakter(e).`);
@@ -123,8 +129,7 @@
   const content = `
     <div class="pf2e chat-card">
       <header>
-        <h3>Zeit angepasst</h3>
-        <p>${actionLabel}</p>
+        <h3>Zeit angepasst (${actionLabel})</h3>
       </header>
       <ul>${updates.map(line => `<li>${line}</li>`).join("")}</ul>
       ${skipped.length
@@ -134,8 +139,6 @@
     </div>
   `;
 
-  ChatMessage.create({
-    speaker: ChatMessage.getSpeaker({ alias: "Zeit-Makro" }),
-    content
-  });
+  await chatApi.gmWhisper(content);
+  
 })();
