@@ -20,7 +20,7 @@
   const actors = characterTokens.map(token => token.actor);
 
   const timeApi = game.alkenstern?.time;
-  if (!timeApi?.addHours || !timeApi?.setHours || !timeApi?.getOrCreate || !timeApi?.readHours || !timeApi?.format) {
+  if (!timeApi?.addHours || !timeApi?.setHours || !timeApi?.getOrCreate || !timeApi?.readHours || !timeApi?.readMax || !timeApi?.format) {
     ui.notifications.error("Alkenstern Zeit-API nicht verfügbar (game.alkenstern.time).");
     return;
   }
@@ -76,11 +76,23 @@
   }
 
   const updates = [];
+  const skipped = [];
 
   for (const token of characterTokens) {
     const actor = token.actor;
     const effect = await timeApi.getOrCreate(actor);
     const before = timeApi.readHours(effect);
+    const max = timeApi.readMax(effect);
+
+    if (sign === "+" && Number.isFinite(max) && before + amount > max) {
+      skipped.push(`${actor.name}: ${timeApi.format(before)} / ${timeApi.format(max)} (benötigt +${amount} h)`);
+      continue;
+    }
+
+    if (!sign && Number.isFinite(max) && amount > max) {
+      skipped.push(`${actor.name}: max. ${timeApi.format(max)} (angefordert ${timeApi.format(amount)})`);
+      continue;
+    }
 
     if (sign === "+") {
       await timeApi.addHours(actor, amount);
@@ -104,6 +116,10 @@
 
   ui.notifications.info(`Zeit ${actionLabel} für ${updates.length} Charakter(e).`);
 
+  if (skipped.length) {
+    ui.notifications.warn(`${skipped.length} Charakter(e) übersprungen: Maximalzeit würde überschritten.`);
+  }
+
   const content = `
     <div class="pf2e chat-card">
       <header>
@@ -111,6 +127,10 @@
         <p>${actionLabel}</p>
       </header>
       <ul>${updates.map(line => `<li>${line}</li>`).join("")}</ul>
+      ${skipped.length
+        ? `<hr /><p><strong>Übersprungen (Max erreicht):</strong></p><ul>${skipped.map(line => `<li>${line}</li>`).join("")}</ul>`
+        : ""
+      }
     </div>
   `;
 
