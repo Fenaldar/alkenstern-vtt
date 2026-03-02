@@ -32,7 +32,7 @@
         <form>
           <div class="form-group">
             <label>Eingabe (+ / - / setzen)</label>
-            <input type="text" name="timeValue" value="+12" placeholder="z. B. +12, -6 oder 48" autofocus />
+            <input type="text" name="timeValue" placeholder="z. B. +12, -6 oder 48" autofocus />
           </div>
           <p style="opacity:0.85; margin-top:0.5em;">
             Mit <strong>+</strong> wird addiert, mit <strong>-</strong> subtrahiert,
