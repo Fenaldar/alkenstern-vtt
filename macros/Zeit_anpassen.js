@@ -17,6 +17,8 @@
     return;
   }
 
+  const actors = characterTokens.map(token => token.actor);
+
   const timeApi = game.alkenstern?.time;
   if (!timeApi?.addHours || !timeApi?.setHours || !timeApi?.getOrCreate || !timeApi?.readHours || !timeApi?.format) {
     ui.notifications.error("Alkenstern Zeit-API nicht verfügbar (game.alkenstern.time).");
@@ -35,6 +37,9 @@
           <p style="opacity:0.85; margin-top:0.5em;">
             Mit <strong>+</strong> wird addiert, mit <strong>-</strong> subtrahiert,
             ohne Vorzeichen wird der Wert direkt gesetzt (in Stunden).
+          </p>
+          <p style="margin-top:0.5em;">
+            Ausgewählte Charaktere: <strong>${actors.map(a => a.name).join(", ")}</strong>
           </p>
         </form>
       `,
