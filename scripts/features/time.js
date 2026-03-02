@@ -199,18 +199,29 @@ export async function setHours(actor, hours, max = null) {
 export async function filterTokensByAvailableTime(tokens, hoursToAdd, maxHours) {
   const blocked = [];
   const allowed = [];
+  const fallbackMax = Number(maxHours);
 
   for (const token of tokens ?? []) {
     const actor = token?.actor;
     if (!actor || actor.type !== "character") continue;
 
     const timeEff = await getOrCreate(actor);
-    await writeMax(timeEff, maxHours);
+    const existingMax = Number(getRule(timeEff)?.max);
+    const hasExistingMax = Number.isFinite(existingMax);
+    const effectiveMax = hasExistingMax
+      ? existingMax
+      : Number.isFinite(fallbackMax)
+        ? Math.max(0, Math.floor(fallbackMax))
+        : readMax(timeEff);
+
+    if (!hasExistingMax && Number.isFinite(fallbackMax)) {
+      await writeMax(timeEff, fallbackMax);
+    }
 
     const hours = readHours(timeEff);
     const wouldBe = hours + Math.floor(Number(hoursToAdd) || 0);
 
-    if (wouldBe > maxHours) {
+    if (wouldBe > effectiveMax) {
       blocked.push({ name: actor.name, hours, wouldBe });
     } else {
       allowed.push(token);
