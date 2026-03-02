@@ -99,11 +99,18 @@
 
   ui.notifications.info(`Zeit ${actionLabel} für ${updates.length} Charakter(e).`);
 
+  const content = `
+    <div class="pf2e chat-card">
+      <header>
+        <h3>Zeit angepasst</h3>
+        <p>${actionLabel}</p>
+      </header>
+      <ul>${updates.map(line => `<li>${line}</li>`).join("")}</ul>
+    </div>
+  `;
+
   ChatMessage.create({
     speaker: ChatMessage.getSpeaker({ alias: "Zeit-Makro" }),
-    content: `
-      <h3>Zeit angepasst (${actionLabel})</h3>
-      <ul>${updates.map(line => `<li>${line}</li>`).join("")}</ul>
-    `
+    content
   });
 })();
