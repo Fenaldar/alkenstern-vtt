@@ -85,12 +85,12 @@
     const max = timeApi.readMax(effect);
 
     if (sign === "+" && Number.isFinite(max) && before + amount > max) {
-      skipped.push(`${actor.name}: ${timeApi.format(before)} / ${timeApi.format(max)} (benötigt +${amount} h)`);
+      skipped.push(`<strong>${actor.name}</strong>: ${timeApi.format(before)} / ${timeApi.format(max)}`);
       continue;
     }
 
     if (!sign && Number.isFinite(max) && amount > max) {
-      skipped.push(`${actor.name}: max. ${timeApi.format(max)} (angefordert ${timeApi.format(amount)})`);
+      skipped.push(`<strong>${actor.name}</strong>: max. ${timeApi.format(max)} (angefordert ${timeApi.format(amount)})`);
       continue;
     }
 
@@ -105,7 +105,7 @@
     const refreshed = await timeApi.getOrCreate(actor);
     const after = timeApi.readHours(refreshed);
 
-    updates.push(`${actor.name}: ${timeApi.format(before)} → ${timeApi.format(after)}`);
+    updates.push(`<strong>${actor.name}</strong>: ${timeApi.format(before)} → ${timeApi.format(after)}`);
   }
 
   const actionLabel = sign === "+"
