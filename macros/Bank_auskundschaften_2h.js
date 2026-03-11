@@ -1,11 +1,13 @@
 // Macro: Bank auskundschaften (2 Std)
-// Erhöht für ausgewählte Charaktere die verstrichene Zeit um 2 Stunden
-// und startet anschließend den vorgesehenen Wurf über Monk's TokenBar.
+// Erhoeht fuer ausgewaehlte Charaktere die verstrichene Zeit um 2 Stunden
+// und startet anschliessend den vorgesehenen Wurf ueber Monk's TokenBar.
 
 (async () => {
   const timeApi = game.alkenstern?.time;
-  if (!timeApi?.addHours) {
-    ui.notifications.error("Alkenstern Zeit-API nicht verfügbar (game.alkenstern.time).");
+  const hoursToAdd = 2;
+
+  if (!timeApi?.addHours || !timeApi?.filterTokensByAvailableTime || !timeApi?.format) {
+    ui.notifications.error("Alkenstern Zeit-API nicht verfuegbar (game.alkenstern.time).");
     return;
   }
 
@@ -15,15 +17,36 @@
   }
 
   const selectedTokens = canvas.tokens.controlled ?? [];
-  const characterActors = selectedTokens
+  if (!selectedTokens.length) {
+    ui.notifications.warn("Bitte zuerst Tokens auswaehlen.");
+    return;
+  }
+
+  const { blocked, allowed } = await timeApi.filterTokensByAvailableTime(selectedTokens, hoursToAdd);
+
+  if (blocked.length) {
+    const msg = blocked
+      .map((entry) => `${entry.name} (${timeApi.format(entry.hours)} -> ${timeApi.format(entry.wouldBe)})`)
+      .join(", ");
+    ui.notifications.warn(`Nicht genug verfuegbare Zeit: ${msg}`);
+  }
+
+  if (!allowed.length) {
+    ui.notifications.warn("Niemand darf wuerfeln, weil nicht genug Zeit verfuegbar ist.");
+    return;
+  }
+
+  const characterActors = allowed
     .map((token) => token?.actor)
     .filter((actor) => actor?.type === "character");
 
   for (const actor of characterActors) {
-    await timeApi.addHours(actor, 2);
+    await timeApi.addHours(actor, hoursToAdd);
   }
 
-  await game.MonksTokenBar.requestRoll([], {
+  const tokenArg = allowed.map((token) => ({ token: token.name }));
+
+  await game.MonksTokenBar.requestRoll(tokenArg, {
     request: [
       { type: "skill", key: "thievery", count: 1 },
       { type: "attribute", key: "perception" }
