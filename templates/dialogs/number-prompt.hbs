@@ -1,1 +1,32 @@
-{{!-- optional später --}}
+{{!-- templates/dialogs/number-prompt.hbs --}}
+<form class="alkenstern alkenstern-number-prompt" autocomplete="off">
+  {{#if hint}}
+    <p class="notes" style="margin-top:0;">{{hint}}</p>
+  {{/if}}
+
+  <div class="form-group">
+    <label>{{label}}</label>
+    <div class="form-fields">
+      <input
+        type="number"
+        name="value"
+        value="{{value}}"
+        {{#if min}}min="{{min}}"{{/if}}
+        {{#if max}}max="{{max}}"{{/if}}
+        {{#if step}}step="{{step}}"{{/if}}
+        {{#if placeholder}}placeholder="{{placeholder}}"{{/if}}
+        {{#if autofocus}}autofocus{{/if}}
+        inputmode="numeric"
+      />
+    </div>
+
+    {{#if help}}
+      <p class="notes">{{help}}</p>
+    {{/if}}
+  </div>
+
+  {{!-- Optional: small footer line --}}
+  {{#if footer}}
+    <p class="notes" style="margin-bottom:0;">{{footer}}</p>
+  {{/if}}
+</form>
