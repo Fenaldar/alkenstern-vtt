@@ -31,24 +31,14 @@
     return;
   }
 
+  const dialogContent = await renderTemplate("templates/dialogs/zeit-anpassen-prompt.hbs", {
+    actorNames: actors.map(a => a.name).join(", ")
+  });
+
   const rawInput = await new Promise((resolve) => {
     new Dialog({
       title: "Zeit anpassen",
-      content: `
-        <form>
-          <div class="form-group">
-            <label>Eingabe (+ / - / setzen)</label>
-            <input type="text" name="timeValue" placeholder="z. B. +12, -6 oder 48" autofocus />
-          </div>
-          <p style="opacity:0.85; margin-top:0.5em;">
-            Mit <strong>+</strong> wird addiert, mit <strong>-</strong> subtrahiert,
-            ohne Vorzeichen wird der Wert direkt gesetzt (in Stunden).
-          </p>
-          <p style="margin-top:0.5em;">
-            Ausgewählte Charaktere: <strong>${actors.map(a => a.name).join(", ")}</strong>
-          </p>
-        </form>
-      `,
+      content: dialogContent,
       buttons: {
         ok: {
           icon: '<i class="fas fa-check"></i>',
