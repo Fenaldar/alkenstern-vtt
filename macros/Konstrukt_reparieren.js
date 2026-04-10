@@ -13,38 +13,6 @@
     if (die === 1) degree = Math.max(0, degree - 1);
     return degree;
   };
-  const degreeLabel = (degree) => {
-    if (degree === 3) return "Kritischer Erfolg";
-    if (degree === 2) return "Erfolg";
-    if (degree === 1) return "Fehlschlag";
-    return "Kritischer Fehlschlag";
-  };
-  const pf2eOutcomeTag = (degree) => {
-    if (degree === 3) return "criticalSuccess";
-    if (degree === 2) return "success";
-    if (degree === 1) return "failure";
-    return "criticalFailure";
-  };
-  const createPf2eStyleMessage = async ({ title, actor, targetName, dc, total, degree, summary, hpLine = "" }) => {
-    const outcome = pf2eOutcomeTag(degree);
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor }),
-      content: `
-        <section class="pf2e chat-card action-card">
-          <header class="card-header flexrow">
-            <h3>${title}</h3>
-          </header>
-          <div class="card-content">
-            <p><strong>Ziel:</strong> ${targetName}</p>
-            <p><strong>Wurf:</strong> ${total} gegen SG ${dc}</p>
-            <p class="degree-of-success ${outcome}"><strong>${degreeLabel(degree)}</strong></p>
-            <p>${summary}</p>
-            ${hpLine ? `<p>${hpLine}</p>` : ""}
-          </div>
-        </section>
-      `
-    });
-  };
   const postSystemHpRollMessage = async ({ actor, flavor, delta }) => {
     const DamageRollCls = game.pf2e?.DamageRoll ?? CONFIG.Dice?.rolls?.find((r) => r.name === "DamageRoll");
     if (!DamageRollCls || !Number.isFinite(delta) || delta === 0) return false;
@@ -275,7 +243,7 @@
             return;
           }
 
-          const { total, degree } = await rollCraftingCheck({
+          const { degree } = await rollCraftingCheck({
             dc,
             label: "Fertigkeitswurf Handwerk (Construct reparieren)",
             extraRollOptions: ["action:repair", "action:repair:construct-companion"]
@@ -291,26 +259,6 @@
             delta = -Number(damageRoll.total ?? 0);
           }
 
-          const currentHp = Number(companion.system?.attributes?.hp?.value ?? 0);
-          const maxHp = Number(companion.system?.attributes?.hp?.max ?? currentHp);
-          let summary = "Keine Veränderung.";
-
-          if (delta > 0) {
-            summary = `Der Construct erhält ${delta} TP Heilung. (Systemwurf wurde ausgegeben.)`;
-          } else if (delta < 0) {
-            summary = `Der Construct erleidet ${Math.abs(delta)} Schaden. (Systemwurf wurde ausgegeben.)`;
-          }
-
-          await createPf2eStyleMessage({
-            title: "Construct reparieren (Crafting)",
-            actor: repairer,
-            targetName: companion.name,
-            dc,
-            total,
-            degree,
-            summary,
-            hpLine: `Aktuelle TP: ${currentHp}/${maxHp}`
-          });
           if (delta !== 0) {
             const posted = await postSystemHpRollMessage({
               actor: repairer,
@@ -334,6 +282,8 @@
                 content: `<section class="pf2e chat-card"><div class="card-content">${fallbackMessage}</div></section>`
               });
             }
+          } else {
+            ui.notifications.info("Keine HP-Veränderung durch diesen Reparaturwurf.");
           }
 
           const expectedNote = expectedMax !== null && expectedMax !== Number(companion.system.attributes.hp.max)
@@ -361,38 +311,24 @@
             return;
           }
 
-          const { total, degree } = await rollCraftingCheck({
+          const { degree } = await rollCraftingCheck({
             dc,
             label: "Fertigkeitswurf Handwerk (Erste Hilfe am Construct)",
             extraRollOptions: ["action:administer-first-aid", "action:administer-first-aid:stabilize"]
           });
 
-          let summary = "";
           if (degree >= 2) {
             await companion.setFlag(MODULE_ID, "stabilizedAt", Date.now());
-            summary = "Der Construct ist stabilisiert und bleibt bei 0 TP (broken).";
+            ui.notifications.info(`${companion.name} wurde stabilisiert (0 TP, broken).`);
           } else if (degree === 0) {
             const damageRoll = await (new Roll("1d8")).roll({ async: true });
             const damage = Number(damageRoll.total ?? 0);
-            summary = `Der Construct erleidet ${damage} Schaden und bleibt bei 0 TP (broken). (Systemwurf wurde ausgegeben.)`;
             await postSystemHpRollMessage({
               actor: repairer,
               delta: -damage,
               flavor: `<strong>Erste Hilfe am Construct (kritischer Fehlschlag):</strong> ${companion.name}`
             });
-          } else {
-            summary = "Keine Veränderung.";
           }
-
-          await createPf2eStyleMessage({
-            title: "Erste Hilfe am Construct (Crafting)",
-            actor: repairer,
-            targetName: companion.name,
-            dc,
-            total,
-            degree,
-            summary
-          });
         }
       },
       cancel: {
