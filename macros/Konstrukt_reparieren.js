@@ -45,6 +45,21 @@
       `
     });
   };
+  const postSystemHpRollMessage = async ({ actor, flavor, delta }) => {
+    const DamageRollCls = game.pf2e?.DamageRoll ?? CONFIG.Dice?.rolls?.find((r) => r.name === "DamageRoll");
+    if (!DamageRollCls || !Number.isFinite(delta) || delta === 0) return false;
+
+    const magnitude = Math.abs(delta);
+    const formula = delta > 0
+      ? `${magnitude}[healing]`
+      : `${magnitude}[untyped]`;
+    const roll = await (new DamageRollCls(formula)).evaluate({ async: true });
+    await roll.toMessage({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      flavor
+    });
+    return true;
+  };
   const ensureApplyHpHook = () => {
     if (globalThis.__alkensternApplyHpHookRegistered) return;
     globalThis.__alkensternApplyHpHookRegistered = true;
@@ -281,29 +296,9 @@
           let summary = "Keine Veränderung.";
 
           if (delta > 0) {
-            const applyHealingButton = `
-              <button
-                type="button"
-                class="alkenstern-apply-hp"
-                data-actor-uuid="${companion.uuid}"
-                data-delta="${delta}"
-              >
-                Heilung anwenden
-              </button>
-            `;
-            summary = `Der Construct erhält ${delta} TP Heilung.<br/>${applyHealingButton}`;
+            summary = `Der Construct erhält ${delta} TP Heilung. (Systemwurf wurde ausgegeben.)`;
           } else if (delta < 0) {
-            const applyDamageButton = `
-              <button
-                type="button"
-                class="alkenstern-apply-hp"
-                data-actor-uuid="${companion.uuid}"
-                data-delta="${delta}"
-              >
-                Schaden anwenden
-              </button>
-            `;
-            summary = `Der Construct erleidet ${Math.abs(delta)} Schaden.<br/>${applyDamageButton}`;
+            summary = `Der Construct erleidet ${Math.abs(delta)} Schaden. (Systemwurf wurde ausgegeben.)`;
           }
 
           await createPf2eStyleMessage({
@@ -316,6 +311,30 @@
             summary,
             hpLine: `Aktuelle TP: ${currentHp}/${maxHp}`
           });
+          if (delta !== 0) {
+            const posted = await postSystemHpRollMessage({
+              actor: repairer,
+              delta,
+              flavor: `<strong>Construct reparieren:</strong> ${companion.name}`
+            });
+            if (!posted) {
+              ui.notifications.warn("Kein PF2E DamageRoll verfügbar – verwende Fallback-Button.");
+              const fallbackMessage = `
+                <button
+                  type="button"
+                  class="alkenstern-apply-hp"
+                  data-actor-uuid="${companion.uuid}"
+                  data-delta="${delta}"
+                >
+                  ${delta > 0 ? "Heilung anwenden" : "Schaden anwenden"}
+                </button>
+              `;
+              await ChatMessage.create({
+                speaker: ChatMessage.getSpeaker({ actor: repairer }),
+                content: `<section class="pf2e chat-card"><div class="card-content">${fallbackMessage}</div></section>`
+              });
+            }
+          }
 
           const expectedNote = expectedMax !== null && expectedMax !== Number(companion.system.attributes.hp.max)
             ? `<p style="margin:.4em 0; opacity:0.85;">Hinweis: Soll-Max HP wäre ${expectedMax}, aktuell hinterlegt sind ${companion.system.attributes.hp.max}.</p>`
@@ -355,17 +374,12 @@
           } else if (degree === 0) {
             const damageRoll = await (new Roll("1d8")).roll({ async: true });
             const damage = Number(damageRoll.total ?? 0);
-            const applyDamageButton = `
-              <button
-                type="button"
-                class="alkenstern-apply-hp"
-                data-actor-uuid="${companion.uuid}"
-                data-delta="${-damage}"
-              >
-                Schaden anwenden
-              </button>
-            `;
-            summary = `Der Construct erleidet ${damage} Schaden und bleibt bei 0 TP (broken).<br/>${applyDamageButton}`;
+            summary = `Der Construct erleidet ${damage} Schaden und bleibt bei 0 TP (broken). (Systemwurf wurde ausgegeben.)`;
+            await postSystemHpRollMessage({
+              actor: repairer,
+              delta: -damage,
+              flavor: `<strong>Erste Hilfe am Construct (kritischer Fehlschlag):</strong> ${companion.name}`
+            });
           } else {
             summary = "Keine Veränderung.";
           }
