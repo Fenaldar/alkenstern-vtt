@@ -8,7 +8,7 @@ const targetToken = Array.from(game.user.targets)[0];
 const target = targetToken?.actor;
 
 if (!healer) {
-  ui.notifications.warn("Bitte wähle das reparierende Token aus.");
+  ui.notifications.warn("Bitte wähle das zu reparierende Konstrukt aus.");
   return;
 }
 
@@ -106,13 +106,19 @@ function hideRollFromDSN(roll) {
 // ===============================
 
 const rollOptions = healer.getRollOptions(["all", "skill-check", "crafting"]);
-rollOptions.push("action:repair");
+rollOptions.push(
+  "action:repair",
+  "action:repair:trait:manipulate",
+  "action:repair:trait:exploration"
+);
 
 await crafting.check.roll({
   dc: { value: dcValue, visible: true },
   extraRollOptions: rollOptions,
   skipDialog: !isShift,
-
+  action: "repair",
+  traits: ["manipulate", "exploration"],
+  
   callback: async (_roll, outcome, message) => {
     if (!message) return;
 
