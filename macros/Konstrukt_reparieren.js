@@ -22,10 +22,17 @@
       ? `${magnitude}[healing]`
       : `${magnitude}[untyped]`;
     const roll = await (new DamageRollCls(formula)).evaluate({ async: true });
-    await roll.toMessage({
-      speaker: ChatMessage.getSpeaker({ actor }),
-      flavor
-    });
+    if (typeof roll?.toMessage === "function") {
+      await roll.toMessage({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        flavor
+      });
+    } else {
+      await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<p>${flavor} — ${magnitude}</p>`
+      });
+    }
     return true;
   };
   const ensureApplyHpHook = () => {
@@ -106,10 +113,17 @@
     }
 
     const roll = await (new Roll(`1d20 + ${mod}`)).roll({ async: true });
-    await roll.toMessage({
-      speaker: ChatMessage.getSpeaker({ actor: repairer }),
-      flavor: `<strong>${label}:</strong> ${repairer.name} (SG ${dc}).`
-    });
+    if (typeof roll?.toMessage === "function") {
+      await roll.toMessage({
+        speaker: ChatMessage.getSpeaker({ actor: repairer }),
+        flavor: `<strong>${label}:</strong> ${repairer.name} (SG ${dc}).`
+      });
+    } else {
+      await ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor: repairer }),
+        content: `<p><strong>${label}:</strong> ${repairer.name} (SG ${dc}) — Ergebnis: ${roll.total ?? 0}</p>`
+      });
+    }
     const die = Number(roll.dice?.[0]?.total ?? 0);
     const total = Number(roll.total ?? 0);
     const degree = evaluateDegree({ total, dc, die });
