@@ -28,10 +28,18 @@
         flavor
       });
     } else {
-      await ChatMessage.create({
-        speaker: ChatMessage.getSpeaker({ actor }),
-        content: `<p>${flavor} — ${magnitude}</p>`
-      });
+      try {
+        await ChatMessage.create({
+          speaker: ChatMessage.getSpeaker({ actor }),
+          flavor,
+          rolls: [roll]
+        });
+      } catch (_err) {
+        await ChatMessage.create({
+          speaker: ChatMessage.getSpeaker({ actor }),
+          content: `<p>${flavor} — ${magnitude}</p>`
+        });
+      }
     }
     return true;
   };
@@ -78,25 +86,14 @@
     if (typeof crafting?.check?.roll === "function") {
       const result = await crafting.check.roll({
         dc: { value: dc },
-        createMessage: false,
+        createMessage: true,
         skipDialog: true,
         label,
         extraRollOptions
       });
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
       const roll = result?.roll ?? result;
-      if (typeof roll?.toMessage === "function") {
-        await roll.toMessage({
-          speaker: ChatMessage.getSpeaker({ actor: repairer }),
-          flavor: `<strong>${label}:</strong> ${repairer.name} (SG ${dc}).`
-        });
-      } else {
-        const fallbackTotal = Number(roll?.total ?? result?.total ?? 0);
-        await ChatMessage.create({
-          speaker: ChatMessage.getSpeaker({ actor: repairer }),
-          content: `<p><strong>${label}:</strong> ${repairer.name} (SG ${dc}) — Ergebnis: ${fallbackTotal}</p>`
-        });
-      }
       const total = Number(roll?.total ?? result?.total ?? 0);
       const die = Number(
         roll?.dice?.[0]?.values?.[0]
