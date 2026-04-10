@@ -4,7 +4,7 @@
 
 (async () => {
   const BREAK_WINDOW_MS = 10 * 60 * 1000; // 10 Minuten
-  const MODULE_ID = "alkenstern-vtt";
+  const MODULE_ID = game.modules.get("alkenstern")?.active ? "alkenstern" : "world";
 
   const evaluateDegree = ({ total, dc, die }) => {
     // 0=CF,1=F,2=S,3=CS
