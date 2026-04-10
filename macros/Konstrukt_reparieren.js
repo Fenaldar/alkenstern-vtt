@@ -28,24 +28,6 @@
     });
     return true;
   };
-  const waitForOwnChatMessage = ({ timeoutMs = 1500, matcher = null } = {}) => new Promise((resolve) => {
-    let resolved = false;
-    let hookId = null;
-    const finish = () => {
-      if (resolved) return;
-      resolved = true;
-      if (hookId !== null) Hooks.off("createChatMessage", hookId);
-      resolve();
-    };
-
-    hookId = Hooks.on("createChatMessage", (message) => {
-      if (message.user?.id !== game.user.id) return;
-      if (typeof matcher === "function" && !matcher(message)) return;
-      finish();
-    });
-
-    setTimeout(finish, timeoutMs);
-  });
   const ensureApplyHpHook = () => {
     if (globalThis.__alkensternApplyHpHookRegistered) return;
     globalThis.__alkensternApplyHpHookRegistered = true;
@@ -87,19 +69,19 @@
   };
   const rollCraftingCheck = async ({ dc, label, extraRollOptions = [] }) => {
     if (typeof crafting?.check?.roll === "function") {
-      const waitForCheckMessage = waitForOwnChatMessage({
-        matcher: (message) => String(message.flavor ?? message.content ?? "").includes(label)
-      });
       const result = await crafting.check.roll({
         dc: { value: dc },
-        createMessage: true,
+        createMessage: false,
         skipDialog: true,
         label,
         extraRollOptions
       });
-      await waitForCheckMessage;
 
       const roll = result?.roll ?? result;
+      await roll.toMessage({
+        speaker: ChatMessage.getSpeaker({ actor: repairer }),
+        flavor: `<strong>${label}:</strong> ${repairer.name} (SG ${dc}).`
+      });
       const total = Number(roll?.total ?? result?.total ?? 0);
       const die = Number(
         roll?.dice?.[0]?.values?.[0]
