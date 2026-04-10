@@ -13,36 +13,40 @@
     if (die === 1) degree = Math.max(0, degree - 1);
     return degree;
   };
-  const degreeLabel = (degree) => {
-    if (degree === 3) return "Kritischer Erfolg";
-    if (degree === 2) return "Erfolg";
-    if (degree === 1) return "Fehlschlag";
-    return "Kritischer Fehlschlag";
-  };
-  const pf2eOutcomeTag = (degree) => {
-    if (degree === 3) return "criticalSuccess";
-    if (degree === 2) return "success";
-    if (degree === 1) return "failure";
-    return "criticalFailure";
-  };
-  const createPf2eStyleMessage = async ({ title, actor, targetName, dc, total, degree, summary, hpLine = "" }) => {
-    const outcome = pf2eOutcomeTag(degree);
-    await ChatMessage.create({
+  const postSystemHpRollMessage = async ({ actor, flavor, delta }) => {
+    const DamageRollCls = game.pf2e?.DamageRoll ?? CONFIG.Dice?.rolls?.find((r) => r.name === "DamageRoll");
+    if (!DamageRollCls || !Number.isFinite(delta) || delta === 0) return false;
+
+    const magnitude = Math.abs(delta);
+    const formula = delta > 0
+      ? `${magnitude}[healing]`
+      : `${magnitude}[untyped]`;
+    const roll = await (new DamageRollCls(formula)).evaluate({ async: true });
+    await roll.toMessage({
       speaker: ChatMessage.getSpeaker({ actor }),
-      content: `
-        <section class="pf2e chat-card action-card">
-          <header class="card-header flexrow">
-            <h3>${title}</h3>
-          </header>
-          <div class="card-content">
-            <p><strong>Ziel:</strong> ${targetName}</p>
-            <p><strong>Wurf:</strong> ${total} gegen SG ${dc}</p>
-            <p class="degree-of-success ${outcome}"><strong>${degreeLabel(degree)}</strong></p>
-            <p>${summary}</p>
-            ${hpLine ? `<p>${hpLine}</p>` : ""}
-          </div>
-        </section>
-      `
+      flavor
+    });
+    return true;
+  };
+  const waitForOwnChatMessage = async ({ previousCount, timeoutMs = 1200 }) => {
+    if (game.messages.size > previousCount) return;
+
+    await new Promise((resolve) => {
+      let resolved = false;
+      let hookId = null;
+      const finish = () => {
+        if (resolved) return;
+        resolved = true;
+        if (hookId !== null) Hooks.off("createChatMessage", hookId);
+        resolve();
+      };
+
+      hookId = Hooks.on("createChatMessage", (message) => {
+        if (message.user?.id !== game.user.id) return;
+        finish();
+      });
+
+      setTimeout(finish, timeoutMs);
     });
   };
   const ensureApplyHpHook = () => {
@@ -86,6 +90,7 @@
   };
   const rollCraftingCheck = async ({ dc, label, extraRollOptions = [] }) => {
     if (typeof crafting?.check?.roll === "function") {
+      const previousMessageCount = game.messages.size;
       const result = await crafting.check.roll({
         dc: { value: dc },
         createMessage: true,
@@ -93,6 +98,7 @@
         label,
         extraRollOptions
       });
+      await waitForOwnChatMessage({ previousCount: previousMessageCount });
 
       const roll = result?.roll ?? result;
       const total = Number(roll?.total ?? result?.total ?? 0);
@@ -277,13 +283,30 @@
           }
 
           if (delta !== 0) {
-            const max = Number(companion.system.attributes.hp.max);
-            const after = Math.clamped(Number(companion.system.attributes.hp.value) + delta, 0, max);
-            await companion.update({ "system.attributes.hp.value": after });
-            if (after > 0) {
-              await companion.unsetFlag(MODULE_ID, "stabilizedAt");
-              await companion.setFlag(MODULE_ID, "brokenEpisodeActive", false);
+            const posted = await postSystemHpRollMessage({
+              actor: repairer,
+              delta,
+              flavor: `<strong>Construct reparieren:</strong> ${companion.name}`
+            });
+            if (!posted) {
+              ui.notifications.warn("Kein PF2E DamageRoll verfügbar – verwende Fallback-Button.");
+              const fallbackMessage = `
+                <button
+                  type="button"
+                  class="alkenstern-apply-hp"
+                  data-actor-uuid="${companion.uuid}"
+                  data-delta="${delta}"
+                >
+                  ${delta > 0 ? "Heilung anwenden" : "Schaden anwenden"}
+                </button>
+              `;
+              await ChatMessage.create({
+                speaker: ChatMessage.getSpeaker({ actor: repairer }),
+                content: `<section class="pf2e chat-card"><div class="card-content">${fallbackMessage}</div></section>`
+              });
             }
+          } else {
+            ui.notifications.info("Keine HP-Veränderung durch diesen Reparaturwurf.");
           }
 
           const expectedNote = expectedMax !== null && expectedMax !== Number(companion.system.attributes.hp.max)
@@ -311,43 +334,24 @@
             return;
           }
 
-          const { total, degree } = await rollCraftingCheck({
+          const { degree } = await rollCraftingCheck({
             dc,
             label: "Fertigkeitswurf Handwerk (Erste Hilfe am Construct)",
             extraRollOptions: ["action:administer-first-aid", "action:administer-first-aid:stabilize"]
           });
 
-          let summary = "";
           if (degree >= 2) {
             await companion.setFlag(MODULE_ID, "stabilizedAt", Date.now());
-            summary = "Der Construct ist stabilisiert und bleibt bei 0 TP (broken).";
+            ui.notifications.info(`${companion.name} wurde stabilisiert (0 TP, broken).`);
           } else if (degree === 0) {
             const damageRoll = await (new Roll("1d8")).roll({ async: true });
             const damage = Number(damageRoll.total ?? 0);
-            const applyDamageButton = `
-              <button
-                type="button"
-                class="alkenstern-apply-hp"
-                data-actor-uuid="${companion.uuid}"
-                data-delta="${-damage}"
-              >
-                Schaden anwenden
-              </button>
-            `;
-            summary = `Der Construct erleidet ${damage} Schaden und bleibt bei 0 TP (broken).<br/>${applyDamageButton}`;
-          } else {
-            summary = "Keine Veränderung.";
+            await postSystemHpRollMessage({
+              actor: repairer,
+              delta: -damage,
+              flavor: `<strong>Erste Hilfe am Construct (kritischer Fehlschlag):</strong> ${companion.name}`
+            });
           }
-
-          await createPf2eStyleMessage({
-            title: "Erste Hilfe am Construct (Crafting)",
-            actor: repairer,
-            targetName: companion.name,
-            dc,
-            total,
-            degree,
-            summary
-          });
         }
       },
       cancel: {
