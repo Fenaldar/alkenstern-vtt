@@ -45,6 +45,42 @@
       `
     });
   };
+  const rollCraftingCheck = async ({ dc, label, extraRollOptions = [] }) => {
+    if (typeof crafting?.check?.roll === "function") {
+      const result = await crafting.check.roll({
+        dc: { value: dc },
+        createMessage: true,
+        skipDialog: true,
+        label,
+        extraRollOptions
+      });
+
+      const roll = result?.roll ?? result;
+      const total = Number(roll?.total ?? result?.total ?? 0);
+      const die = Number(
+        roll?.dice?.[0]?.values?.[0]
+        ?? roll?.dice?.[0]?.results?.[0]?.result
+        ?? roll?.dice?.[0]?.total
+        ?? 0
+      );
+      const degreeFromSystem = Number(result?.degreeOfSuccess?.value ?? result?.degreeOfSuccess);
+      const degree = Number.isInteger(degreeFromSystem)
+        ? degreeFromSystem
+        : evaluateDegree({ total, dc, die });
+
+      return { total, die, degree };
+    }
+
+    const roll = await (new Roll(`1d20 + ${mod}`)).roll({ async: true });
+    await roll.toMessage({
+      speaker: ChatMessage.getSpeaker({ actor: repairer }),
+      flavor: `<strong>${label}:</strong> ${repairer.name} (SG ${dc}).`
+    });
+    const die = Number(roll.dice?.[0]?.total ?? 0);
+    const total = Number(roll.total ?? 0);
+    const degree = evaluateDegree({ total, dc, die });
+    return { total, die, degree };
+  };
 
   const selected = canvas.tokens.controlled;
   if (!selected?.length || selected.length > 1) {
@@ -184,15 +220,11 @@
             return;
           }
 
-          const roll = await (new Roll(`1d20 + ${mod}`)).roll({ async: true });
-          await roll.toMessage({
-            speaker: ChatMessage.getSpeaker({ actor: repairer }),
-            flavor: `<strong>Repair:</strong> ${repairer.name} repariert ${companion.name} (DC ${dc}).`
+          const { total, degree } = await rollCraftingCheck({
+            dc,
+            label: "Fertigkeitswurf Handwerk (Construct reparieren)",
+            extraRollOptions: ["action:repair", "action:repair:construct-companion"]
           });
-
-          const die = Number(roll.dice?.[0]?.total ?? 0);
-          const total = Number(roll.total ?? 0);
-          const degree = evaluateDegree({ total, dc, die });
 
           let delta = 0;
           let summary = "";
@@ -259,15 +291,11 @@
             return;
           }
 
-          const roll = await (new Roll(`1d20 + ${mod}`)).roll({ async: true });
-          await roll.toMessage({
-            speaker: ChatMessage.getSpeaker({ actor: repairer }),
-            flavor: `<strong>Administer First Aid (Crafting):</strong> ${repairer.name} stabilisiert ${companion.name} (DC ${dc}).`
+          const { total, degree } = await rollCraftingCheck({
+            dc,
+            label: "Fertigkeitswurf Handwerk (Erste Hilfe am Construct)",
+            extraRollOptions: ["action:administer-first-aid", "action:administer-first-aid:stabilize"]
           });
-
-          const die = Number(roll.dice?.[0]?.total ?? 0);
-          const total = Number(roll.total ?? 0);
-          const degree = evaluateDegree({ total, dc, die });
 
           let summary = "";
           if (degree >= 2) {
