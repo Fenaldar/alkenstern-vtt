@@ -260,7 +260,7 @@
             return;
           }
 
-          const { degree } = await rollCraftingCheck({
+          const { total, degree } = await rollCraftingCheck({
             dc,
             label: "Fertigkeitswurf Handwerk (Construct reparieren)",
             extraRollOptions: ["action:repair", "action:repair:construct-companion"]
@@ -276,15 +276,46 @@
             delta = -Number(damageRoll.total ?? 0);
           }
 
-          if (delta !== 0) {
-            const max = Number(companion.system.attributes.hp.max);
-            const after = Math.clamped(Number(companion.system.attributes.hp.value) + delta, 0, max);
-            await companion.update({ "system.attributes.hp.value": after });
-            if (after > 0) {
-              await companion.unsetFlag(MODULE_ID, "stabilizedAt");
-              await companion.setFlag(MODULE_ID, "brokenEpisodeActive", false);
-            }
+          const currentHp = Number(companion.system?.attributes?.hp?.value ?? 0);
+          const maxHp = Number(companion.system?.attributes?.hp?.max ?? currentHp);
+          let summary = "Keine Veränderung.";
+
+          if (delta > 0) {
+            const applyHealingButton = `
+              <button
+                type="button"
+                class="alkenstern-apply-hp"
+                data-actor-uuid="${companion.uuid}"
+                data-delta="${delta}"
+              >
+                Heilung anwenden
+              </button>
+            `;
+            summary = `Der Construct erhält ${delta} TP Heilung.<br/>${applyHealingButton}`;
+          } else if (delta < 0) {
+            const applyDamageButton = `
+              <button
+                type="button"
+                class="alkenstern-apply-hp"
+                data-actor-uuid="${companion.uuid}"
+                data-delta="${delta}"
+              >
+                Schaden anwenden
+              </button>
+            `;
+            summary = `Der Construct erleidet ${Math.abs(delta)} Schaden.<br/>${applyDamageButton}`;
           }
+
+          await createPf2eStyleMessage({
+            title: "Construct reparieren (Crafting)",
+            actor: repairer,
+            targetName: companion.name,
+            dc,
+            total,
+            degree,
+            summary,
+            hpLine: `Aktuelle TP: ${currentHp}/${maxHp}`
+          });
 
           const expectedNote = expectedMax !== null && expectedMax !== Number(companion.system.attributes.hp.max)
             ? `<p style="margin:.4em 0; opacity:0.85;">Hinweis: Soll-Max HP wäre ${expectedMax}, aktuell hinterlegt sind ${companion.system.attributes.hp.max}.</p>`
