@@ -45,6 +45,45 @@
       `
     });
   };
+  const ensureApplyHpHook = () => {
+    if (globalThis.__alkensternApplyHpHookRegistered) return;
+    globalThis.__alkensternApplyHpHookRegistered = true;
+
+    Hooks.on("renderChatMessage", (message, html) => {
+      html.on("click", ".alkenstern-apply-hp", async (event) => {
+        event.preventDefault();
+        const button = event.currentTarget;
+        if (button.disabled) return;
+
+        const actorUuid = String(button.dataset.actorUuid ?? "");
+        const delta = Number(button.dataset.delta ?? 0);
+        if (!actorUuid || !Number.isFinite(delta) || delta === 0) return;
+
+        const actor = await fromUuid(actorUuid);
+        if (!actor) return;
+
+        const canEdit = game.user.isGM || actor.isOwner;
+        if (!canEdit) {
+          ui.notifications.warn("Du darfst die Trefferpunkte dieses Actors nicht ändern.");
+          return;
+        }
+
+        const hpData = actor.system?.attributes?.hp;
+        const before = Number(hpData?.value ?? 0);
+        const max = Number(hpData?.max ?? before);
+        const after = Math.clamped(before + delta, 0, max);
+        await actor.update({ "system.attributes.hp.value": after });
+        if (after > 0) {
+          await actor.unsetFlag(MODULE_ID, "destroyedAt");
+          await actor.unsetFlag(MODULE_ID, "stabilizedAt");
+          await actor.setFlag(MODULE_ID, "brokenEpisodeActive", false);
+        }
+
+        button.disabled = true;
+        button.textContent = delta > 0 ? "Heilung angewendet" : "Schaden angewendet";
+      });
+    });
+  };
   const rollCraftingCheck = async ({ dc, label, extraRollOptions = [] }) => {
     if (typeof crafting?.check?.roll === "function") {
       const result = await crafting.check.roll({
@@ -206,6 +245,7 @@
       </p>
     </form>
   `;
+  ensureApplyHpHook();
 
   new Dialog({
     title: "Repair Construct Companion",
@@ -246,19 +286,23 @@
 
           const before = Number(companion.system.attributes.hp.value);
           const after = Math.clamped(before + delta, 0, Number(companion.system.attributes.hp.max));
-          await companion.update({ "system.attributes.hp.value": after });
-
-          // Bei erfolgreicher Reparatur über 0 HP ist der Construct nicht mehr "broken".
-          if (after > 0) {
-            await companion.unsetFlag(MODULE_ID, "destroyedAt");
-            await companion.unsetFlag(MODULE_ID, "stabilizedAt");
-            await companion.setFlag(MODULE_ID, "brokenEpisodeActive", false);
-          }
 
           const expectedNote = expectedMax !== null && expectedMax !== Number(companion.system.attributes.hp.max)
             ? `<p style="margin:.4em 0; opacity:0.85;">Hinweis: Soll-Max HP wäre ${expectedMax}, aktuell hinterlegt sind ${companion.system.attributes.hp.max}.</p>`
             : "";
 
+          const applyHpButton = delta !== 0
+            ? `
+              <button
+                type="button"
+                class="alkenstern-apply-hp"
+                data-actor-uuid="${companion.uuid}"
+                data-delta="${delta}"
+              >
+                ${delta > 0 ? "Heilung anwenden" : "Schaden anwenden"}
+              </button>
+            `
+            : "";
           await createPf2eStyleMessage({
             title: "Construct reparieren",
             actor: repairer,
@@ -266,8 +310,8 @@
             dc,
             total,
             degree,
-            summary,
-            hpLine: `TP: <strong>${before}</strong> → <strong>${after}</strong>`
+            summary: `${summary}${applyHpButton ? "<br/>" + applyHpButton : ""}`,
+            hpLine: `TP nach Anwendung: <strong>${before}</strong> → <strong>${after}</strong>`
           });
           if (expectedNote) {
             await ChatMessage.create({
@@ -304,7 +348,17 @@
           } else if (degree === 0) {
             const damageRoll = await (new Roll("1d8")).roll({ async: true });
             const damage = Number(damageRoll.total ?? 0);
-            summary = `Der Construct erleidet ${damage} Schaden und bleibt bei 0 TP (broken).`;
+            const applyDamageButton = `
+              <button
+                type="button"
+                class="alkenstern-apply-hp"
+                data-actor-uuid="${companion.uuid}"
+                data-delta="${-damage}"
+              >
+                Schaden anwenden
+              </button>
+            `;
+            summary = `Der Construct erleidet ${damage} Schaden und bleibt bei 0 TP (broken).<br/>${applyDamageButton}`;
           } else {
             summary = "Keine Veränderung.";
           }
