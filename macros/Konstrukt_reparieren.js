@@ -78,10 +78,18 @@
       });
 
       const roll = result?.roll ?? result;
-      await roll.toMessage({
-        speaker: ChatMessage.getSpeaker({ actor: repairer }),
-        flavor: `<strong>${label}:</strong> ${repairer.name} (SG ${dc}).`
-      });
+      if (typeof roll?.toMessage === "function") {
+        await roll.toMessage({
+          speaker: ChatMessage.getSpeaker({ actor: repairer }),
+          flavor: `<strong>${label}:</strong> ${repairer.name} (SG ${dc}).`
+        });
+      } else {
+        const fallbackTotal = Number(roll?.total ?? result?.total ?? 0);
+        await ChatMessage.create({
+          speaker: ChatMessage.getSpeaker({ actor: repairer }),
+          content: `<p><strong>${label}:</strong> ${repairer.name} (SG ${dc}) — Ergebnis: ${fallbackTotal}</p>`
+        });
+      }
       const total = Number(roll?.total ?? result?.total ?? 0);
       const die = Number(
         roll?.dice?.[0]?.values?.[0]
