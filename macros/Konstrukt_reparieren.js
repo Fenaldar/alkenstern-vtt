@@ -13,6 +13,38 @@
     if (die === 1) degree = Math.max(0, degree - 1);
     return degree;
   };
+  const degreeLabel = (degree) => {
+    if (degree === 3) return "Kritischer Erfolg";
+    if (degree === 2) return "Erfolg";
+    if (degree === 1) return "Fehlschlag";
+    return "Kritischer Fehlschlag";
+  };
+  const pf2eOutcomeTag = (degree) => {
+    if (degree === 3) return "criticalSuccess";
+    if (degree === 2) return "success";
+    if (degree === 1) return "failure";
+    return "criticalFailure";
+  };
+  const createPf2eStyleMessage = async ({ title, actor, targetName, dc, total, degree, summary, hpLine = "" }) => {
+    const outcome = pf2eOutcomeTag(degree);
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `
+        <section class="pf2e chat-card action-card">
+          <header class="card-header flexrow">
+            <h3>${title}</h3>
+          </header>
+          <div class="card-content">
+            <p><strong>Ziel:</strong> ${targetName}</p>
+            <p><strong>Wurf:</strong> ${total} gegen SG ${dc}</p>
+            <p class="degree-of-success ${outcome}"><strong>${degreeLabel(degree)}</strong></p>
+            <p>${summary}</p>
+            ${hpLine ? `<p>${hpLine}</p>` : ""}
+          </div>
+        </section>
+      `
+    });
+  };
 
   const selected = canvas.tokens.controlled;
   if (!selected?.length || selected.length > 1) {
@@ -167,17 +199,17 @@
 
           if (degree === 3) {
             delta = 10 + (10 * rank);
-            summary = `Kritischer Erfolg: +${delta} HP.`;
+            summary = `Der Construct erhält ${delta} Trefferpunkte zurück.`;
           } else if (degree === 2) {
             delta = 5 + (5 * rank);
-            summary = `Erfolg: +${delta} HP.`;
+            summary = `Der Construct erhält ${delta} Trefferpunkte zurück.`;
           } else if (degree === 0) {
             const damageRoll = await (new Roll("2d6")).roll({ async: true });
             const rawDamage = Number(damageRoll.total ?? 0);
             delta = -rawDamage;
-            summary = `Kritischer Fehlschlag: ${rawDamage} Schaden am Construct.`;
+            summary = `Der Construct erleidet ${rawDamage} Schaden.`;
           } else {
-            summary = "Fehlschlag: Keine Veränderung.";
+            summary = "Keine Veränderung.";
           }
 
           const before = Number(companion.system.attributes.hp.value);
@@ -195,18 +227,22 @@
             ? `<p style="margin:.4em 0; opacity:0.85;">Hinweis: Soll-Max HP wäre ${expectedMax}, aktuell hinterlegt sind ${companion.system.attributes.hp.max}.</p>`
             : "";
 
-          await ChatMessage.create({
-            speaker: ChatMessage.getSpeaker({ actor: repairer }),
-            content: `
-              <div class="pf2e chat-card">
-                <header><h3 style="margin:0;">Construct Repair abgeschlossen</h3></header>
-                <p style="margin:.4em 0;"><strong>${companion.name}</strong></p>
-                <p style="margin:.4em 0;">${summary}</p>
-                <p style="margin:.4em 0;">HP: <strong>${before}</strong> → <strong>${after}</strong></p>
-                ${expectedNote}
-              </div>
-            `
+          await createPf2eStyleMessage({
+            title: "Construct reparieren",
+            actor: repairer,
+            targetName: companion.name,
+            dc,
+            total,
+            degree,
+            summary,
+            hpLine: `TP: <strong>${before}</strong> → <strong>${after}</strong>`
           });
+          if (expectedNote) {
+            await ChatMessage.create({
+              speaker: ChatMessage.getSpeaker({ actor: repairer }),
+              content: `<section class="pf2e chat-card"><div class="card-content">${expectedNote}</div></section>`
+            });
+          }
         }
       },
       stabilize: {
@@ -236,24 +272,23 @@
           let summary = "";
           if (degree >= 2) {
             await companion.setFlag(MODULE_ID, "stabilizedAt", Date.now());
-            summary = "Erfolg: Der Construct ist stabilisiert, bleibt aber bei 0 HP (broken).";
+            summary = "Der Construct ist stabilisiert und bleibt bei 0 TP (broken).";
           } else if (degree === 0) {
             const damageRoll = await (new Roll("1d8")).roll({ async: true });
             const damage = Number(damageRoll.total ?? 0);
-            summary = `Kritischer Fehlschlag: ${damage} Schaden. Der Construct bleibt bei 0 HP (broken).`;
+            summary = `Der Construct erleidet ${damage} Schaden und bleibt bei 0 TP (broken).`;
           } else {
-            summary = "Fehlschlag: Keine Veränderung.";
+            summary = "Keine Veränderung.";
           }
 
-          await ChatMessage.create({
-            speaker: ChatMessage.getSpeaker({ actor: repairer }),
-            content: `
-              <div class="pf2e chat-card">
-                <header><h3 style="margin:0;">Erste Hilfe am Construct</h3></header>
-                <p style="margin:.4em 0;"><strong>${companion.name}</strong></p>
-                <p style="margin:.4em 0;">${summary}</p>
-              </div>
-            `
+          await createPf2eStyleMessage({
+            title: "Erste Hilfe am Construct (Crafting)",
+            actor: repairer,
+            targetName: companion.name,
+            dc,
+            total,
+            degree,
+            summary
           });
         }
       },
