@@ -28,27 +28,24 @@
     });
     return true;
   };
-  const waitForOwnChatMessage = async ({ previousCount, timeoutMs = 1200 }) => {
-    if (game.messages.size > previousCount) return;
+  const waitForOwnChatMessage = ({ timeoutMs = 1500, matcher = null } = {}) => new Promise((resolve) => {
+    let resolved = false;
+    let hookId = null;
+    const finish = () => {
+      if (resolved) return;
+      resolved = true;
+      if (hookId !== null) Hooks.off("createChatMessage", hookId);
+      resolve();
+    };
 
-    await new Promise((resolve) => {
-      let resolved = false;
-      let hookId = null;
-      const finish = () => {
-        if (resolved) return;
-        resolved = true;
-        if (hookId !== null) Hooks.off("createChatMessage", hookId);
-        resolve();
-      };
-
-      hookId = Hooks.on("createChatMessage", (message) => {
-        if (message.user?.id !== game.user.id) return;
-        finish();
-      });
-
-      setTimeout(finish, timeoutMs);
+    hookId = Hooks.on("createChatMessage", (message) => {
+      if (message.user?.id !== game.user.id) return;
+      if (typeof matcher === "function" && !matcher(message)) return;
+      finish();
     });
-  };
+
+    setTimeout(finish, timeoutMs);
+  });
   const ensureApplyHpHook = () => {
     if (globalThis.__alkensternApplyHpHookRegistered) return;
     globalThis.__alkensternApplyHpHookRegistered = true;
@@ -90,7 +87,9 @@
   };
   const rollCraftingCheck = async ({ dc, label, extraRollOptions = [] }) => {
     if (typeof crafting?.check?.roll === "function") {
-      const previousMessageCount = game.messages.size;
+      const waitForCheckMessage = waitForOwnChatMessage({
+        matcher: (message) => String(message.flavor ?? message.content ?? "").includes(label)
+      });
       const result = await crafting.check.roll({
         dc: { value: dc },
         createMessage: true,
@@ -98,7 +97,7 @@
         label,
         extraRollOptions
       });
-      await waitForOwnChatMessage({ previousCount: previousMessageCount });
+      await waitForCheckMessage;
 
       const roll = result?.roll ?? result;
       const total = Number(roll?.total ?? result?.total ?? 0);
